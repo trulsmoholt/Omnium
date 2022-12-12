@@ -2,7 +2,7 @@
 
 namespace Omnium
 {
-    public class Order
+    public class Order : IEquatable<Order>
     {
         [JsonProperty("id")]
         public Guid OrderId { get; set; }
@@ -11,7 +11,17 @@ namespace Omnium
 
         public string CustomerName { get; set; }
 
-        public int Total { get; set; }
+        public double Total { get; set; }
+
+        //Også en mulig implementasjon
+
+        //private double _total;
+        //public double Total
+        //{
+        //    get { return CalculateOrderTotal(this); }
+        //    set { _total = value; }
+        //}
+
 
         public List<OrderLine> OrderLines { get; set; }
 
@@ -24,5 +34,21 @@ namespace Omnium
         }
 
         public Order() { }
+
+        public double CalculateOrderTotal()
+        {
+            return this.OrderLines.Select(x => x.Price*x.Quantity).Sum();
+        }
+
+        public bool Equals(Order? other)
+        {
+            if (other == null) return false;
+            return this.OrderId.ToString() == other.OrderId.ToString();
+        }
+
+        public override int GetHashCode()
+        {
+            return this.OrderId.ToString().GetHashCode();
+        }
     }
 }

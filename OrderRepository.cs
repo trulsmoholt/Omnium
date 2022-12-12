@@ -1,4 +1,5 @@
 ﻿using Microsoft.Azure.Cosmos;
+using Microsoft.Azure.Cosmos.Linq;
 using Microsoft.Extensions.Options;
 
 namespace Omnium
@@ -74,65 +75,128 @@ namespace Omnium
                 await container.CreateItemAsync<Order>(order, new PartitionKey(order.OrderId.ToString()));
             }
         }
+        public async Task<List<Order>> GetOrdersByCustomerId(string customerId)
+        {
+            var container = await GetContainer();
+            IOrderedQueryable<Order> queryable = container.GetItemLinqQueryable<Order>();
+
+            var matches = queryable.Where(x => x.CustomerId.ToString() == customerId);
+
+            using FeedIterator<Order> linqFeed = matches.ToFeedIterator();
+
+            var results = new List<Order>();
+
+            // Iterate query result pages
+            while (linqFeed.HasMoreResults)
+            {
+                FeedResponse<Order> response = await linqFeed.ReadNextAsync();
+
+                // Iterate query results
+                foreach (Order item in response)
+                {
+                    results.Add(item);
+                }
+            }
+            return results;
+        }
+
+        public async Task<List<Order>> GetOrdersByProductId(string id)
+        {
+            var container = await GetContainer();
+            IOrderedQueryable<Order> queryable = container.GetItemLinqQueryable<Order>();
+
+            var matches = queryable.Where(x => x.OrderLines.Where(x=>x.ProductId.ToString()==id).Any());
+
+            using FeedIterator<Order> linqFeed = matches.ToFeedIterator();
+
+            var results = new List<Order>();
+
+            // Iterate query result pages
+            while (linqFeed.HasMoreResults)
+            {
+                FeedResponse<Order> response = await linqFeed.ReadNextAsync();
+
+                // Iterate query results
+                foreach (Order item in response)
+                {
+                    results.Add(item);
+                }
+            }
+            return results; 
+        }
+
+        public async Task<Order> GetOrder(string orderId)
+        {
+            var container = await GetContainer();
+
+            var response = await container.ReadItemAsync<Order>(id: orderId, partitionKey: new PartitionKey(orderId));
+
+            return response.Resource;
+        }
 
         public static List<Order> MockOrders()
         {
             var orders = new List<Order>();
 
-            // Create a list of customer IDs
-            var customerIds = new List<Tuple<string,string>>
+            // Create a list of customers
+            var customers = new List<Tuple<Guid, string>>
             {
-                Tuple.Create("3fa85f64-5717-4562-b3fc-2c963f66afa6","customer1"),
-                Tuple.Create("2d2d2d2d-5717-4562-b3fc-2c963f66afa6","customer2"),
-                Tuple.Create("1a1a1a1a-5717-4562-b3fc-2c963f66afa6","customer3"),
-                Tuple.Create("4b4b4b4b-5717-4562-b3fc-2c963f66afa6","customer4"),
-                Tuple.Create("5c5c5c5c-5717-4562-b3fc-2c963f66afa6","customer5")
+                Tuple.Create(new Guid("00000000-0000-0000-0000-000000000000"),"customer1"),
+                Tuple.Create(new Guid("00000000-0000-0000-0000-000000000001"),"customer2"),
+                Tuple.Create(new Guid("00000000-0000-0000-0000-000000000002"),"customer3"),
+                Tuple.Create(new Guid("00000000-0000-0000-0000-000000000003"),"customer4"),
+                Tuple.Create(new Guid("00000000-0000-0000-0000-000000000004"),"customer5")
             };
 
-            // Create a list of product names
-            var productNames = new List<Tuple<string,int>>
+            // Create a list of products
+            var products = new List<Tuple<string, int, Guid>>
             {
-                Tuple.Create("apple", 5),
-                Tuple.Create("pear", 10),
-                Tuple.Create("banana", 20),
-                Tuple.Create("orange", 2),
-                Tuple.Create("mango", 100)
+                Tuple.Create("apple", 5, new Guid("00000000-0000-0000-0000-000000000005")),
+                Tuple.Create("pear", 10, new Guid("00000000-0000-0000-0000-000000000006")),
+                Tuple.Create("banana", 20, new Guid("00000000-0000-0000-0000-000000000007")),
+                Tuple.Create("orange", 2, new Guid("00000000-0000-0000-0000-000000000008")),
+                Tuple.Create("mango", 100, new Guid("00000000-0000-0000-0000-000000000009"))
             };
 
             // Create 10 orders
             for (int i = 0; i < 10; i++)
             {
                 // Generate a random customer ID
-                var customer = customerIds[new Random().Next(0, customerIds.Count)];
+                var customer = customers[new Random().Next(0, customers.Count)];
 
                 // Generate a random product name
-                var product = productNames[new Random().Next(0, productNames.Count)];
+                var product = products[new Random().Next(0, products.Count)];
 
                 // Create an order
                 var order = new Order
                 {
                     OrderId = Guid.NewGuid(),
-                    CustomerId = new Guid(customer.Item1),
+                    CustomerId = customer.Item1,
                     CustomerName = customer.Item2,
                     Total = 0,
-                    OrderLines = new List<OrderLine>
+                    OrderLines = Enumerable.Range(0, new Random().Next(0, 5)).Select(x =>
                     {
-                        new OrderLine
+                        var product = products[new Random().Next(0, products.Count)];
+                        return new OrderLine()
                         {
-                            Quantity = new Random().Next(1,5),
+                            OrderLineId = Guid.NewGuid(),
                             Price = product.Item2,
                             ProductName = product.Item1,
-                            OrderLineId = Guid.NewGuid(),
-                            ProductId = Guid.NewGuid()
-                        }
-                    }
+                            ProductId = product.Item3,
+                            Quantity= new Random().Next(1,5),
+                        };
+                    }).ToList()
                 };
 
                 // Add the order to the list
                 orders.Add(order);
             }
+
+            orders.ForEach(order =>
+            {
+                order.Total = order.CalculateOrderTotal();
+            });
             return orders;
         }
-
     }
 }

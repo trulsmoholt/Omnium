@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Azure.Cosmos.Linq;
+using Microsoft.Azure.Cosmos.Serialization.HybridRow;
 using Omnium;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -29,18 +31,52 @@ if (app.Environment.IsDevelopment())
 
 app.MapGet("/order", GetOrders);
 
-static async Task<IResult> GetOrders(IOrdreRepository repo)
+app.MapGet("/order/{id}", GetOrder);
+
+static async Task<IResult> GetOrder(string id, IOrdreRepository repo)
 {
+    var order = await repo.GetOrder(id);
+    if(order != null)
+    {
+        return TypedResults.Ok(order);
+    }
+    return TypedResults.NotFound();
+}
+
+static async Task<IResult> GetOrders(IOrdreRepository repo, string? customerId, string? productId)
+{
+    if(customerId != null && productId != null)
+    {
+        var customerFilteredOrders = await repo.GetOrdersByCustomerId(customerId);
+        var productFilteredOrders = await repo.GetOrdersByProductId(productId);
+        var result = customerFilteredOrders.Intersect(productFilteredOrders).ToList();
+        return ReturnList(result);
+    }
+    else if(customerId != null) 
+    {
+        var result = await repo.GetOrdersByCustomerId(customerId);
+        return ReturnList(result);
+    }
+    else if(productId != null)
+    {
+        var result = await repo.GetOrdersByProductId(productId);
+        return ReturnList(result);
+    }
     var list = await repo.GetOrders();
+    return ReturnList(list);
+}
+
+static IResult ReturnList(IEnumerable<Order> list)
+{
     if (list.Any())
     {
         return TypedResults.Ok(list);
     }
-    else
-    {
-        return TypedResults.NoContent();
-    }
+    return TypedResults.NotFound();
 }
+
+
+
 
 app.MapPost("/order", async (IOrdreRepository repo, OrderDTO orderDto) =>
 {
