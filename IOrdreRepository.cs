@@ -1,4 +1,6 @@
-﻿namespace Omnium
+﻿using Omnium.models;
+
+namespace Omnium
 {
     public interface IOrdreRepository
     {

@@ -1,4 +1,4 @@
-﻿namespace Omnium
+﻿namespace Omnium.models
 {
     public class OrderDTO
     {

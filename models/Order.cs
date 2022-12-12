@@ -1,6 +1,6 @@
 ﻿using Newtonsoft.Json;
 
-namespace Omnium
+namespace Omnium.models
 {
     public class Order : IEquatable<Order>
     {
@@ -25,10 +25,11 @@ namespace Omnium
 
         public List<OrderLine> OrderLines { get; set; }
 
-        public Order(OrderDTO orderDto) {
-            CustomerId= orderDto.CustomerId;
-            CustomerName= orderDto.CustomerName;
-            Total= orderDto.Total;
+        public Order(OrderDTO orderDto)
+        {
+            CustomerId = orderDto.CustomerId;
+            CustomerName = orderDto.CustomerName;
+            Total = orderDto.Total;
             OrderLines = orderDto.OrderLines;
             OrderId = Guid.NewGuid();
         }
@@ -37,18 +38,18 @@ namespace Omnium
 
         public double CalculateOrderTotal()
         {
-            return this.OrderLines.Select(x => x.Price*x.Quantity).Sum();
+            return OrderLines.Select(x => x.Price * x.Quantity).Sum();
         }
 
         public bool Equals(Order? other)
         {
             if (other == null) return false;
-            return this.OrderId.ToString() == other.OrderId.ToString();
+            return OrderId.ToString() == other.OrderId.ToString();
         }
 
         public override int GetHashCode()
         {
-            return this.OrderId.ToString().GetHashCode();
+            return OrderId.ToString().GetHashCode();
         }
     }
 }

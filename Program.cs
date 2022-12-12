@@ -6,6 +6,8 @@ using Microsoft.Azure.Cosmos;
 using Microsoft.Azure.Cosmos.Linq;
 using Microsoft.Azure.Cosmos.Serialization.HybridRow;
 using Omnium;
+using Omnium.models;
+using System;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,12 +28,40 @@ using CosmosClient client = new(
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwaggerUI();//naviger til /swagger for å se dokumentasjon
 }
 
-app.MapGet("/order", GetOrders);
+var orderController = app.MapGroup("/order");
 
-app.MapGet("/order/{id}", GetOrder);
+orderController.MapGet("/", GetOrders).WithOpenApi();
+
+orderController.MapGet("/{id}", GetOrder);
+
+orderController.MapPost("/", PostOrder);
+
+app.MapGet("/topSellingProducts", GetTopSellingProducts);
+static async Task<IResult> GetTopSellingProducts(IOrdreRepository repo)
+{
+    var topSellingDict = new Dictionary<string, double>();
+
+    var orders = await repo.GetOrders();
+
+    foreach(Order order in orders)
+    {
+        order.OrderLines.ForEach(purchase =>
+        {
+            if (topSellingDict.TryGetValue(purchase.ProductName,out double total)) {
+                topSellingDict[purchase.ProductName] = total + (purchase.Price*purchase.Quantity);
+            }
+            else
+            {
+                topSellingDict.Add(purchase.ProductName, purchase.Quantity * purchase.Price);
+            }
+        });
+    }
+
+    return TypedResults.Ok(topSellingDict.OrderBy(x => -x.Value).Take(5).ToDictionary(x => x.Key, x=> x.Value));
+}
 
 static async Task<IResult> GetOrder(string id, IOrdreRepository repo)
 {
@@ -63,6 +93,9 @@ static async Task<IResult> GetOrders(IOrdreRepository repo, string? customerId, 
         return ReturnList(result);
     }
     var list = await repo.GetOrders();
+
+    AddPosOrder(list);
+
     return ReturnList(list);
 }
 
@@ -75,14 +108,11 @@ static IResult ReturnList(IEnumerable<Order> list)
     return TypedResults.NotFound();
 }
 
-
-
-
-app.MapPost("/order", async (IOrdreRepository repo, OrderDTO orderDto) =>
+static async Task<IResult> PostOrder(IOrdreRepository repo, OrderDTO orderDto)
 {
     var order = await repo.PostOrder(orderDto);
-    return TypedResults.Created($"/order/{order.OrderId}",order);
-});
+    return TypedResults.Created($"/order/{order.OrderId}", order);
+}
 
 app.MapPost("/mockOrders", async (IOrdreRepository repo) =>
 {
@@ -90,5 +120,29 @@ app.MapPost("/mockOrders", async (IOrdreRepository repo) =>
     return TypedResults.NoContent();
 }); 
 
+static void AddPosOrder(List<Order> list)//eksempel på at man kan gjøre Order ting med en PosOrder
+{
+    var posOrder = new PosOrder()
+    {
+        OrderId = Guid.NewGuid(),
+        PosId = Guid.NewGuid(),
+        OrderLines = new OrderLine[]
+    {
+            new OrderLine() {
+                OrderLineId= Guid.NewGuid(),
+                ProductId= Guid.NewGuid(),
+                Price=12,
+                ProductName="strawberry",
+                Quantity=1
+            }
+    }.ToList(),
+        CustomerId = Guid.NewGuid(),
+        CustomerName = "Truls",
+    };
+
+    posOrder.Total = posOrder.CalculateOrderTotal();
+
+    list.Add(posOrder);
+}
 
 app.Run();
